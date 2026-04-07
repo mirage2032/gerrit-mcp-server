@@ -1,4 +1,8 @@
-# 🐍 Gerrit MCP Server
+# 🐍 Gerrit MCP Server (Fork)
+
+> **This is a modified fork** of the original
+> [gerrit-mcp-server](https://gerrit.googlesource.com/gerrit-mcp-server) by
+> Google. Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
 
 An MCP (Model Context Protocol) server for interacting with the Gerrit code
 review system. This server allows a language model like Gemini to query changes,
@@ -6,6 +10,12 @@ retrieve details, and manage reviews by executing `curl` commands against the
 Gerrit REST API.
 
 This server can be run as a persistent **HTTP server** or on-demand via **STDIO**.
+
+## Modifications from upstream
+
+*   **Threaded comment replies**: `post_review_comment` supports `in_reply_to` for replying to existing comment threads.
+*   **Comment IDs in output**: `list_change_comments` now includes the comment `id`, enabling targeted replies.
+*   **Change message log**: New `list_change_messages` tool to retrieve the full change log (patchset uploads, CI results, review scores, etc.).
 
 ## 📚 Documentation
 

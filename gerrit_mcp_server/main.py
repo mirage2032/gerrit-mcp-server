@@ -554,11 +554,55 @@ async def list_change_comments(
             timestamp = comment.get("updated", "No date")
             message = comment["message"]
             status = "UNRESOLVED" if comment.get("unresolved", False) else "RESOLVED"
-            output += f"L{line}: [{author}] ({timestamp}) - {status}\n"
+            comment_id = comment.get("id", "")
+            output += f"L{line}: [{author}] ({timestamp}) - {status} (id: {comment_id})\n"
             output += f"  {message}\n"
 
     if not found_comments:
         return [{"type": "text", "text": f"No comments found for CL {change_id}."}]
+
+    return [{"type": "text", "text": output}]
+
+
+@mcp.tool()
+async def list_change_messages(
+    change_id: str, gerrit_base_url: Optional[str] = None
+):
+    """
+    Lists the full change log (all messages) for a CL, including patchset
+    uploads, CI build results, review scores, and other events across all
+    patchsets.
+    """
+    config = load_gerrit_config()
+    gerrit_hosts = config.get("gerrit_hosts", [])
+    base_url = _normalize_gerrit_url(
+        _get_gerrit_base_url(gerrit_base_url), gerrit_hosts
+    )
+    url = f"{base_url}/changes/{change_id}/messages"
+    result_json_str = await run_curl([url], base_url)
+    try:
+        messages = json.loads(result_json_str)
+    except json.JSONDecodeError:
+        return [
+            {
+                "type": "text",
+                "text": f"Failed to parse JSON response from Gerrit. Raw response:\n{result_json_str}",
+            }
+        ]
+
+    if not messages:
+        return [{"type": "text", "text": f"No messages found for CL {change_id}."}]
+
+    output = f"Change log for CL {change_id} ({len(messages)} entries):\n"
+    for msg in messages:
+        author = msg.get("author", {}).get("name", "Gerrit")
+        date = msg.get("date", "")
+        rev = msg.get("_revision_number", "?")
+        tag = msg.get("tag", "")
+        message = msg.get("message", "").strip()
+        tag_str = f" [{tag}]" if tag else ""
+        output += f"\n--- Patchset {rev} | {date}{tag_str} ({author})\n"
+        output += f"{message}\n"
 
     return [{"type": "text", "text": output}]
 
@@ -1171,26 +1215,30 @@ async def post_review_comment(
     line_number: int,
     message: str,
     unresolved: bool = True,
+    in_reply_to: Optional[str] = None,
     gerrit_base_url: Optional[str] = None,
     labels: Optional[Dict[str, int]] = None,
 ):
     """
     Posts a review comment on a specific line of a file in a CL.
+    Use in_reply_to with a comment id from list_change_comments to reply in-thread.
     """
     config = load_gerrit_config()
     gerrit_hosts = config.get("gerrit_hosts", [])
     base_url = _normalize_gerrit_url(_get_gerrit_base_url(gerrit_base_url), gerrit_hosts)
     url = f"{base_url}/changes/{change_id}/revisions/current/review"
 
+    comment_entry: Dict[str, Any] = {
+        "line": line_number,
+        "message": message,
+        "unresolved": unresolved,
+    }
+    if in_reply_to:
+        comment_entry["in_reply_to"] = in_reply_to
+
     payload = {
         "comments": {
-            file_path: [
-                {
-                    "line": line_number,
-                    "message": message,
-                    "unresolved": unresolved,
-                }
-            ]
+            file_path: [comment_entry]
         },
     }
     if labels:
@@ -1254,7 +1302,11 @@ def cli_main(argv: List[str]):
         mcp.run(transport="streamable-http")
 
 
-if __name__ == "__main__":
+def cli_main_entry():
     cli_main(sys.argv)
+
+
+if __name__ == "__main__":
+    cli_main_entry()
 
 app = mcp.streamable_http_app()

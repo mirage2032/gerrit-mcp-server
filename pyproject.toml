@@ -16,6 +16,9 @@ dev = [
     "pytest-env"
 ]
 
+[project.scripts]
+gerrit-mcp-server = "gerrit_mcp_server.main:cli_main_entry"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
